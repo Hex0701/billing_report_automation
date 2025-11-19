@@ -16,55 +16,61 @@ This document describes the complete system architecture including high-level st
 
 ---
 
-# 2. 🧱 High-Level Architecture Overview
+## 1. 🏗️ High-Level Architecture (Mermaid Flowchart)
 
-```
-+-----------------------------+
-|         FRONTEND           |
-|     React + Tailwind       |
-|-----------------------------|
-|  User Dashboard            |
-|  BOQ Editor                |
-|  File Upload Engine        |
-|  RA Bill Viewer            |
-+--------------+--------------+
-               |
-               v
-+--------------+--------------+
-|          BACKEND API        |
-|           FastAPI           |
-|-----------------------------|
-| Authentication             |
-| BOQ Engine                 |
-| Measurement Engine         |
-| RA Bill Engine             |
-| Invoice Engine             |
-| PDF Exporter               |
-+--------------+--------------+
-               |
-               v
-+--------------+--------------+
-|       AI PROCESSING LAYER   |
-|     (Microservice-ready)    |
-|-----------------------------|
-| OCR Parsing (Tesseract)    |
-| LLM Pipelines (OpenAI etc.)|
-| Drawing Interpretation      |
-| Error Detection             |
-+--------------+--------------+
-               |
-               v
-+--------------+--------------+
-|        DATABASE LAYER       |
-|            MongoDB          |
-|-----------------------------|
-| Users                       |
-| Projects                    |
-| BOQ Items                   |
-| Measurements                |
-| RA Bills                    |
-| Invoices                    |
-+-----------------------------+
+```mermaid
+flowchart LR
+    subgraph Frontend["Frontend (React App)"]
+        UI["User Interface"]
+        Upload["File Upload Engine"]
+        Editor["BOQ and RA Bill Editor"]
+        Viewer["Preview and PDF Exporter"]
+    end
+
+    subgraph Backend["Backend API (FastAPI)"]
+        Gateway["REST API Gateway"]
+        Auth["Authentication & JWT Service"]
+        BillingEngine["Billing & Orchestration Engine"]
+        RuleEngine["Validation & Rule Engine"]
+        Logs["Audit Log Service"]
+    end
+
+    subgraph AI["AI Processing Layer (Microservices)"]
+        OCR["OCR Extraction Service"]
+        LLM["BOQ Understanding LLM"]
+        MeasureAI["Measurement Extraction Service"]
+        ErrorCheck["Error Detection Model"]
+    end
+
+    subgraph DB[("MongoDB Cluster")]
+        Projects["Projects Collection"]
+        BOQs["BOQ Items"]
+        RABills["RA Bills"]
+        Measurements["Measurements"]
+        Invoices["Invoices"]
+        Users["Users"]
+        LogsDB["Logs and History"]
+    end
+
+    UI --> Gateway
+    Upload --> Gateway
+    Editor --> Gateway
+    Viewer --> Gateway
+
+    Gateway --> Auth
+    Gateway --> BillingEngine
+    Gateway --> RuleEngine
+    Gateway --> Logs
+
+    BillingEngine --> OCR
+    BillingEngine --> LLM
+    BillingEngine --> MeasureAI
+    BillingEngine --> ErrorCheck
+
+    Gateway --> DB
+    BillingEngine --> DB
+    RuleEngine --> DB
+    Logs --> LogsDB
 ```
 
 ---
@@ -107,6 +113,76 @@ B --> G[Progress Dashboard]
 - TailwindCSS  
 - Zustand / Redux (state management)  
 - Axios (API client)
+
+## Component Breakdown Mermaid Graph
+
+```mermaid
+graph TD
+    subgraph Frontend["Frontend Layer"]
+        UI["Dashboard UI"]
+        UploadMgr["File Upload Manager"]
+        ProjectMgr["Project Manager"]
+        BOQEditor["BOQ Editor"]
+        RABEditor["RA Bill Editor"]
+        InvoiceViewer["Invoice Viewer"]
+        PDFPreview["PDF Previewer"]
+    end
+
+    subgraph Backend["Backend Layer"]
+        APIGateway["API Gateway"]
+        Auth["Authentication & JWT"]
+        BillingEngine["Billing Engine"]
+        RuleEngine["Validation & Rule Engine"]
+        BOQManager["BOQ Manager"]
+        MeasureManager["Measurement Manager"]
+        InvoiceEngine["Invoice Engine"]
+        PDFGen["PDF Generator"]
+        AuditLog["Audit Logging Service"]
+    end
+
+    subgraph AI["AI Processing Layer"]
+        OCR["OCR Engine"]
+        TableExtract["Table Extraction Module"]
+        TextClass["Text Classification Model"]
+        BOQLLM["BOQ Understanding LLM"]
+        MeasureAI["Measurement Extraction Model"]
+        ErrorAI["Error Detection AI"]
+    end
+
+    subgraph DB["Database Layer (MongoDB)"]
+        Users["Users Collection"]
+        Projects["Projects Collection"]
+        BOQs["BOQ Items"]
+        Bills["RA Bills"]
+        Measurements["Measurements"]
+        Invoices["Invoices"]
+        AILogs["AI Logs"]
+    end
+
+    UI --> APIGateway
+    UploadMgr --> APIGateway
+    ProjectMgr --> APIGateway
+    BOQEditor --> APIGateway
+    RABEditor --> APIGateway
+    InvoiceViewer --> APIGateway
+    PDFPreview --> APIGateway
+
+    BillingEngine --> OCR
+    BillingEngine --> BOQLLM
+    BillingEngine --> MeasureAI
+    BillingEngine --> ErrorAI
+    BOQManager --> TextClass
+    BOQManager --> TableExtract
+
+    APIGateway --> DB
+    BillingEngine --> Bills
+    RuleEngine --> Bills
+    BOQManager --> BOQs
+    MeasureManager --> Measurements
+    InvoiceEngine --> Invoices
+    Auth --> Users
+    AuditLog --> AILogs
+```
 
 ---
 
@@ -223,6 +299,60 @@ A separate module (can be microservice).
 ---
 
 # 6. 🔌 API Architecture
+
+## API Service Layer Mermaid Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant User as User
+    participant FE as Frontend (React)
+    participant API as Backend (FastAPI)
+    participant Auth as Auth Service
+    participant Queue as Job Queue
+    participant AI as AI Processing Layer
+    participant OCR as OCR Engine
+    participant LLM as LLM Parser
+    participant ME as Measurement Extractor
+    participant DB as MongoDB
+
+    User->>FE: Login Request (email+password)
+    FE->>API: POST /auth/login
+    API->>Auth: Validate credentials
+    Auth-->>API: JWT token
+    API-->>FE: 200 OK + JWT
+    FE-->>User: Login successful
+
+    User->>FE: Upload BOQ file (PDF/Excel)
+    FE->>API: POST /projects/{id}/files
+    API->>DB: Store raw file metadata
+    API->>Queue: Enqueue parse_boq job
+    Queue->>AI: Job dispatched
+    AI->>OCR: Run OCR on document
+    OCR-->>AI: OCR output (text + tables + coords)
+    AI->>LLM: Parse text -> BOQ JSON
+    LLM-->>AI: Parsed BOQ JSON
+    AI->>API: Callback / Webhook with structured BOQ
+    API->>DB: Save structured BOQ
+
+    User->>FE: Upload measurement sheet / drawing
+    FE->>API: POST /projects/{id}/measurements
+    API->>Queue: Enqueue extract_measurements
+    Queue->>AI: Dispatch measurement job
+    AI->>ME: Extract dimensional data, tables
+    ME-->>AI: Measurement JSON
+    AI->>API: Callback with measurements
+    API->>DB: Save measurements
+
+    User->>FE: Request RA Bill generation
+    FE->>API: POST /projects/{id}/ra-bills/generate
+    API->>BillingEngine: Compute valuation (apply rules, map quantities)
+    BillingEngine->>DB: Read BOQ + Measurements + Contract terms
+    BillingEngine->>RuleEngine: Validate clauses & deductions
+    RuleEngine-->>BillingEngine: Validation results
+    BillingEngine-->>API: RA Bill JSON
+    API->>DB: Save RA Bill
+    API-->>FE: Return RA Bill Preview
+```
 
 ### REST API Structure:
 ```
